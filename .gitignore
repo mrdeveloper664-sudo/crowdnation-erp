@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.next/
+build/
+.dart_tool/
+.env
+.env.local
+.env.*.local
+backend/storage/
+*.log
+.DS_Store
+.idea/
+*.iml
