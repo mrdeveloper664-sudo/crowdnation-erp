@@ -4,8 +4,8 @@ Multi-company ERP, accounting-first (Tally Prime / Zoho Books style), UAE VAT aw
 
 | Part | Stack | State |
 |---|---|---|
-| `backend/` | NestJS, Prisma, PostgreSQL (RLS), JWT | complete for all phases; 21 unit + 76 e2e tests pass |
-| `web/` | Next.js 15, React 19, Tailwind | ~60 pages, production build passes, manually spot-checked |
+| `backend/` | NestJS, Prisma, PostgreSQL (RLS), JWT | complete for all phases; 24 unit + 92 e2e tests pass |
+| `web/` | Next.js 15, React 19, Tailwind | ~60 pages, production build passes, 8 Playwright browser tests + smoke test |
 | `mobile/` | Flutter, Provider, Dio, GoRouter | 25 tests pass, analyzer clean, **iOS build failed here, never run on a device** |
 | `docs/` | | checklist, accounting rules, DB design, API, deployment, security |
 
@@ -14,7 +14,7 @@ Multi-company ERP, accounting-first (Tally Prime / Zoho Books style), UAE VAT aw
 ## Run locally
 Requires Node 20+, PostgreSQL 16, (Flutter for mobile).
 ```bash
-# 1. database (one-time)
+# 1. database (one-time) - or: sudo -u postgres ops/setup-dev-db.sh
 psql postgres -c "CREATE ROLE nexerp LOGIN PASSWORD 'nexerp_pw' CREATEDB" -c "CREATE ROLE nexerp_app LOGIN PASSWORD 'nexerp_app_pw' NOSUPERUSER NOBYPASSRLS" -c "CREATE DATABASE nexerp_dev OWNER nexerp" -c "CREATE DATABASE nexerp_test OWNER nexerp"
 
 # 2. backend  -> http://localhost:4000/api/docs
@@ -35,5 +35,7 @@ cd backend
 DATABASE_URL=postgresql://nexerp:nexerp_pw@localhost:5432/nexerp_test DIRECT_DATABASE_URL=postgresql://nexerp:nexerp_pw@localhost:5432/nexerp_test npx prisma migrate deploy  # once
 npm run test:unit && npm run test:e2e
 cd ../web && npm run typecheck && npm test && npm run build
+# browser tests (need `npm run build` in backend/ and web/ first; start the servers themselves; Chromium via `npx playwright install chromium` if missing)
+npm run test:e2e
 cd ../mobile && flutter analyze && flutter test
 ```

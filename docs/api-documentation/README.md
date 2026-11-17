@@ -17,9 +17,9 @@ Money is always a **decimal string** (`"1250.50"`). Dates are `YYYY-MM-DD`. Send
 | Reports | `GET /reports/catalog` · `GET /reports/run/:name?...&format=json|xlsx|pdf|csv|html` (names in the catalog: trial-balance, profit-and-loss, balance-sheet, cash-flow, general-ledger, day-book, cash-book, bank-book, ledger-statement, customer/supplier-outstanding, accounts-receivable/payable, vat, income/expense-report, stock-*, lead-report, employee-report, payroll-report, expense-budget, project-profitability, asset-register, depreciation-schedule) · `GET /reports/trial-balance` (legacy shape) |
 | Dashboard | `GET /dashboard?financialYearId&from&to` |
 | Journal | `GET /journal-entries/:id` (drill-down target) |
-| VAT | `GET/POST /vat/rates` `PATCH /vat/rates/:id` · `POST /vat/calculate` · `GET /vat/transactions` · `GET /vat/return?from&to` |
+| VAT | `GET/POST /vat/rates` `PATCH /vat/rates/:id` · `POST /vat/rates/reverse-charge` (enable reverse-charge code `RC`) · `POST /vat/calculate` · `GET /vat/transactions` · `GET /vat/return?from&to` |
 | Customers / suppliers | `GET/POST /customers` `/suppliers` · `GET/PATCH /customers/:id` · `GET /customers/:id/statement` |
-| Sales | `/sales/documents` (list/create/get/put/delete, `:id/confirm|convert|post|cancel|apply|print`) · `/sales/receipts` (+`:id/cancel`) · `/sales/recurring` (+`run`) |
+| Sales | `/sales/documents` (list/create/get/put/delete, `:id/confirm|convert|post|cancel|apply|print`) · `/sales/receipts` (+`:id/cancel`; body accepts `currency` + `exchangeRate` for foreign-currency settlement) · `/sales/recurring` (+`run`) |
 | Purchases | `/purchases/documents` (same actions) · `/purchases/payments` |
 | Inventory | `/inventory/categories|units|warehouses|products` (+`products/by-barcode/:code`) · `POST /inventory/stock-in|stock-out|transfers|adjustments` · `GET /inventory/stock|movements|serials` |
 | CRM | `/crm/sources` `/crm/leads` (+`assign|stage|convert`) `/crm/pipeline` `/crm/contacts` `/crm/activities` `POST /crm/reminders/run` |
