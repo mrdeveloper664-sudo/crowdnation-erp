@@ -201,7 +201,19 @@ export class HrController {
       const unpaidTypes = new Set((await tx.leaveType.findMany({ where: { isPaid: false } })).map((t) => t.id));
       let tg = ZERO, td = ZERO, tn = ZERO; const slips: any[] = [];
       for (const e of emps) {
-        const items = e.salaryItems.filter((i) => i.component.isActive).map((i) => ({ name: i.component.name, type: i.component.type, amount: round(i.component.calc === 'PERCENT_OF_BASIC' ? e.basicSalary.mul(i.value).div(100) : i.value, 2) }));
+        // pro-rata for employees who joined / left part-way through the month (calendar days)
+        const monthDays = end.getUTCDate();
+        const empFrom = e.joinDate > start ? e.joinDate : start;
+        const empTo = e.terminatedAt && e.terminatedAt < end ? e.terminatedAt : end;
+        const empDays = Math.max(0, daysBetween(empFrom, empTo));
+        const prorated = empDays < monthDays;
+        const factor = D(empDays).div(monthDays);
+        const basicPaid = prorated ? round(e.basicSalary.mul(factor), 2) : e.basicSalary;
+        const items: Array<{ name: string; type: string; amount: any }> = e.salaryItems.filter((i) => i.component.isActive).map((i) => {
+          const full = i.component.calc === 'PERCENT_OF_BASIC' ? basicPaid.mul(i.value).div(100) : i.component.type === 'ALLOWANCE' && prorated ? i.value.mul(factor) : i.value;
+          return { name: i.component.name, type: i.component.type, amount: round(full, 2) };
+        });
+        if (prorated) items.push({ name: `Pro-rata ${empDays}/${monthDays} days`, type: 'INFO', amount: ZERO });
         const allowances = items.filter((i) => i.type === 'ALLOWANCE').reduce((s, i) => s.add(i.amount), ZERO);
         let deductions = items.filter((i) => i.type === 'DEDUCTION').reduce((s, i) => s.add(i.amount), ZERO);
         const att = await tx.attendance.findMany({ where: { employeeId: e.id, date: { gte: start, lte: end } } });
@@ -211,10 +223,10 @@ export class HrController {
         for (const l of leaves) unpaid = unpaid.add(daysBetween(l.fromDate > start ? l.fromDate : start, l.toDate < end ? l.toDate : end));
         const unpaidAmt = round(e.basicSalary.div(30).mul(unpaid), 2);
         if (unpaidAmt.gt(0)) { items.push({ name: `Unpaid days (${unpaid})`, type: 'DEDUCTION', amount: unpaidAmt }); deductions = deductions.add(unpaidAmt); }
-        const gross = e.basicSalary.add(allowances), net = gross.sub(deductions);
+        const gross = basicPaid.add(allowances), net = gross.sub(deductions);
         if (net.lt(0)) throw new BadRequestException(`${e.name}: deductions exceed gross pay`);
         tg = tg.add(gross); td = td.add(deductions); tn = tn.add(net);
-        slips.push({ companyId: u.companyId, employeeId: e.id, basic: e.basicSalary, allowances, deductions, unpaidDays: unpaid, gross, net, details: items.map((i) => ({ ...i, amount: i.amount.toString() })) });
+        slips.push({ companyId: u.companyId, employeeId: e.id, basic: basicPaid, allowances, deductions, unpaidDays: unpaid, gross, net, details: items.map((i) => ({ ...i, amount: i.amount.toString() })) });
       }
       const run = await tx.payrollRun.create({ data: { companyId: u.companyId, period: d.period, totalGross: tg, totalDeduction: td, totalNet: tn, createdBy: u.userId, payslips: { create: slips } } });
       await this.audit.log(tx, { companyId: u.companyId, userId: u.userId, action: 'payroll.generated', entityType: 'payroll_run', entityId: run.id, after: { period: d.period, net: tn.toString() } });

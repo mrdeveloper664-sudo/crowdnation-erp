@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Controller, Inject, Delete, Get, Param, ParseUUIDPipe, Post, Query, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { createHash, randomUUID } from 'crypto';
 import { Response } from 'express';
@@ -6,7 +6,7 @@ import { memoryStorage } from 'multer';
 import { AuditService } from '../common/audit.service';
 import { AuthUser, CurrentUser, RequirePermission } from '../common/decorators';
 import { PrismaService } from '../common/prisma.service';
-import { LocalStorage } from './storage';
+import { LocalStorage, StorageDriver } from './storage';
 
 const MAX = 10 * 1024 * 1024;
 const ENTITIES: Record<string, string> = { voucher: 'voucher', employee: 'hr', expense: 'expense', document: 'sales', asset: 'asset', project: 'project', lead: 'crm' };
@@ -22,7 +22,7 @@ const SIGNATURES: Array<{ mime: string; ext: string[]; test: (b: Buffer) => bool
 
 @Controller('attachments')
 export class AttachmentsController {
-  constructor(private prisma: PrismaService, private storage: LocalStorage, private audit: AuditService) {}
+  constructor(private prisma: PrismaService, @Inject(LocalStorage) private storage: StorageDriver, private audit: AuditService) {}
 
   @Post() @RequirePermission('voucher', 'create')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX, files: 1 } }))

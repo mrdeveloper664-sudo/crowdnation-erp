@@ -3,7 +3,7 @@
 Legend: [x] done **and covered by an automated test** · [~] implemented, verified only manually / partly · [ ] not done.
 A feature counts as done only when database + backend + client UI exist; client-UI tests are noted separately.
 
-Test totals: backend **17 unit + 74 end-to-end** (real PostgreSQL), mobile **25** (unit + widget), web: production build + type-check + 3 util tests + manual browser check.
+Test totals: backend **21 unit + 76 end-to-end** (real PostgreSQL), mobile **25** (unit + widget), web: production build + type-check + 3 util tests + a 10-check smoke test against the running servers + manual browser check.
 
 ## Environment used
 macOS, Node 23, PostgreSQL 16, Flutter 3.41, Xcode 15.2. Docker and Redis are **not installed** here.
@@ -26,7 +26,7 @@ macOS, Node 23, PostgreSQL 16, Flutter 3.41, Xcode 15.2. Docker and Redis are **
 ## Phase 3 - vouchers
 - [x] 8 voucher types, numbering, workflow draft -> approval -> post -> cancel/replace, segregation of duties
 - [x] Attachments (magic-byte checked, 10 MB, tenant scoped), print/PDF, notifications on submit
-- [~] Attachment storage is local disk behind a `StorageDriver` interface; the S3-compatible driver is not written
+- [x] Attachment storage: local disk by default, S3-compatible driver (`STORAGE_DRIVER=s3`, unit-tested with a fake client; **not run against a real bucket**)
 
 ## Phase 4 - UAE VAT
 - [x] Versioned tax codes (STD/ZERO/EXEMPT/OOS) with effective dates, inclusive/exclusive calculation, VAT ledger posting
@@ -52,11 +52,14 @@ macOS, Node 23, PostgreSQL 16, Flutter 3.41, Xcode 15.2. Docker and Redis are **
 - [x] Expenses: categories, direct expenses + employee claims, approval (auto-posts), reimbursement, recurring, budgets
 - [x] Projects: members, tasks, progress, income/cost/profitability from posted documents and expenses
 - [x] Fixed assets: categories, register + purchase posting, SL/DB depreciation (idempotent), transfer, maintenance, disposal with gain/loss
-- [~] Payroll: 30-day month, no pro-rata for mid-month joiners, no WPS file, no end-of-service gratuity
+- [x] Payroll pro-rata for employees who join or leave part-way through a month (tested)
+- [~] Payroll: 30-day month for unpaid-day deductions, no WPS file, no end-of-service gratuity
 
 ## Dashboard & notifications
 - [x] Live dashboard API (revenue, expenses, profit, cash, bank, AR, AP, VAT, inventory, trends, alerts) - ties to P&L in tests
-- [x] In-app notifications (assignment, approvals, reminders). [ ] push / email delivery
+- [x] In-app notifications (assignment, approvals, reminders). [ ] push notifications
+- [x] Email: SMTP driver (`SMTP_URL`, unit-tested with nodemailer's JSON transport; **not sent through a real mail server**)
+- [x] Nightly jobs (recurring invoices/expenses, CRM reminders) via `ENABLE_SCHEDULER=true` or `JobsService.runAll()`; tested end to end
 
 ## Web application (Next.js)
 - [x] ~60 routes: auth, dashboard, accounting, VAT, sales, purchases, inventory, CRM, HR, projects, expenses, assets, reports, settings
@@ -67,10 +70,11 @@ macOS, Node 23, PostgreSQL 16, Flutter 3.41, Xcode 15.2. Docker and Redis are **
 - [x] Login, dashboard, ledgers + statements, vouchers (list/detail/create payment, receipt, journal, approve/post/cancel), sales & purchase invoices, customers, suppliers, expenses, reports, approvals, notifications, profile
 - [x] Offline drafts: stored on device, synced as DRAFTS only (never posted), server rejections kept with the reason
 - [x] 25 automated tests, `flutter analyze` clean
-- [ ] **Not built or run on a device/simulator** (Android toolchain incomplete here; iOS build not attempted to protect disk space)
+- [ ] **Not run on a device/simulator.** `flutter build ios --simulator` was attempted twice and fails at link time with `Framework 'Flutter' not found` (engine artifacts are present; likely the installed Xcode 15.2 is too old for Flutter 3.41 - unconfirmed). The Android toolchain on this Mac is incomplete. Try a newer Xcode / `flutter doctor` fixes before shipping.
 
 ## Phase 12 - security & deployment
 - [x] RLS, argon2id, JWT rotation, validation (whitelist), helmet, rate limiting, audit log, upload hardening
 - [~] Dockerfile + docker-compose written but **never run** (Docker unavailable)
-- [ ] External penetration test, automated backups, secrets-manager integration, SMTP/SES, load testing
-- [~] `npm audit`: moderate/high advisories remain in transitive dev/build tooling (see docs/SECURITY.md)
+- [x] Backups: `ops/backup.sh` / `ops/restore.sh` with a dedicated BYPASSRLS role; a real dump was restored into a scratch database and row counts matched (scheduling and off-site copy are up to you)
+- [x] `npm audit` (production deps): **0 vulnerabilities** in backend and web after dependency overrides (backend e2e + web build re-verified)
+- [ ] External penetration test, secrets-manager integration, load testing

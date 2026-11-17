@@ -16,4 +16,10 @@ Never run the API as a superuser or the table owner without `FORCE ROW LEVEL SEC
 `cd mobile && flutter pub get && flutter run --dart-define=API_URL=https://api.example.com/api/v1`. Android emulator default is `http://10.0.2.2:4100/api/v1`; iOS simulator: pass `--dart-define=API_URL=http://localhost:4100/api/v1`. Release builds need signing config (not included). **The app has been analysed and unit/widget-tested but not run on a device or simulator.**
 
 ## Scheduled jobs
-No scheduler is bundled (Redis/queues are not installed). Call these daily from cron or a job runner for each company: `POST /sales/recurring/run`, `POST /expenses/recurring/run`, `POST /crm/reminders/run`.
+Set `ENABLE_SCHEDULER=true` on exactly ONE API instance: after 02:00 UTC each day it runs recurring invoices, recurring expenses and CRM reminders for every active company (acting as that company's first administrator). The same endpoints can also be called from cron: `POST /sales/recurring/run`, `POST /expenses/recurring/run`, `POST /crm/reminders/run`.
+
+## Backups
+Create the backup role (`backend/docker/init-roles.sql`), then schedule `BACKUP_DATABASE_URL=... BACKUP_DIR=... ops/backup.sh` (verifies the archive, keeps `KEEP_DAYS`). Copy the folder off-site. Restore into an empty database with `TARGET_URL=... ops/restore.sh <dump>` as a superuser. Row level security is FORCEd, so the normal owner role cannot dump data - this is intentional.
+
+## Email and files
+`SMTP_URL` + `MAIL_FROM` enable real email. `STORAGE_DRIVER=s3` with `S3_BUCKET`/`S3_REGION` (and `S3_ENDPOINT` for S3-compatible services) stores attachments in object storage.

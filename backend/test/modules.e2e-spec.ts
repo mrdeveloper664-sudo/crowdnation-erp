@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PASSWORD, Tenant, accountMap, api, createApp, registerAndLogin, today } from './helpers';
 import { MailService } from '../src/common/mail.service';
+import { JobsService } from '../src/common/jobs.service';
 
 describe('CRM, HR, expenses, projects, assets, dashboard (e2e)', () => {
   let app: INestApplication; let T: Tenant; let acc: Record<string, string>; let c: ReturnType<typeof api>; let mail: MailService;
@@ -239,5 +240,42 @@ describe('CRM, HR, expenses, projects, assets, dashboard (e2e)', () => {
       await request(app.getHttpServer()).get(`/api/v1/attachments/${up.body.data.id}/download`).set('Authorization', `Bearer ${other.token}`).expect(400); // not visible to another tenant
       await request(app.getHttpServer()).post(`/api/v1/attachments?entityType=voucher&entityId=${v.id}`).set('Authorization', `Bearer ${T.token}`).attach('file', Buffer.from('x'), 'run.exe').expect(400);
     });
+  });
+});
+
+describe('Payroll pro-rata and nightly jobs (e2e)', () => {
+  let app: INestApplication; let T: Tenant; let c: ReturnType<typeof api>;
+  beforeAll(async () => { ({ app } = await createApp()); T = await registerAndLogin(app, 'Prorata Co'); c = api(app, T.token); });
+  afterAll(async () => { await app.close(); });
+
+  it('pays a mid-month joiner pro-rata (calendar days) and a full-month employee in full', async () => {
+    const y = new Date().getUTCFullYear(); const m = new Date().getUTCMonth() + 1; const mm = String(m).padStart(2, '0');
+    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const join = days >= 21 ? 11 : 1; // joins on the 11th -> employed days = days - 10
+    const e1 = (await c.post('/hr/employees', { name: 'Late Joiner', joinDate: `${y}-${mm}-${String(join).padStart(2, '0')}`, basicSalary: '3000.00' }).expect(201)).body.data;
+    await c.post('/hr/employees', { name: 'Full Month', joinDate: `${y - 1}-01-01`, basicSalary: '3000.00' }).expect(201);
+    const housing = (await c.post('/hr/salary-components', { name: 'Housing', type: 'ALLOWANCE', calc: 'FIXED' }).expect(201)).body.data;
+    await c.put(`/hr/employees/${e1.id}/salary-items`, { items: [{ componentId: housing.id, value: '600.00' }] }).expect(200);
+    const run = (await c.post('/hr/payroll/generate', { period: `${y}-${mm}` }).expect(201)).body.data;
+    const detail = (await c.get(`/hr/payroll/${run.id}`).expect(200)).body.data;
+    const empDays = days - (join - 1);
+    const expectedBasic = (Math.round((3000 * empDays / days) * 100) / 100).toFixed(2);
+    const late = detail.payslips.find((p: any) => p.employee === 'Late Joiner');
+    const full = detail.payslips.find((p: any) => p.employee === 'Full Month');
+    expect(late.basic).toBe(expectedBasic);
+    expect(Number(late.allowances)).toBeCloseTo(Math.round(600 * empDays / days * 100) / 100, 2);
+    expect(full.basic).toBe('3000.00');
+    if (join === 1) expect(late.basic).toBe('3000.00');
+  });
+
+  it('nightly job runs recurring invoices, expenses and reminders for every company', async () => {
+    const jobs = app.get(JobsService);
+    const cust = (await c.post('/customers', { name: 'Job Customer' }).expect(201)).body.data;
+    const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+    await c.post('/sales/recurring', { partyId: cust.id, frequency: 'MONTHLY', startDate: d.toISOString().slice(0, 10), autoPost: true, lines: [{ description: 'Retainer', quantity: '1', unitPrice: '50.00' }] }).expect(201);
+    const summary = await jobs.runAll();
+    expect(summary[T.code].invoices).toBe(2);
+    expect(summary[T.code].error).toBeUndefined();
+    expect((await jobs.runAll())[T.code].invoices).toBe(0); // idempotent: nothing left due
   });
 });

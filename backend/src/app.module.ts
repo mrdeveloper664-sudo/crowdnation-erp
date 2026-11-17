@@ -43,6 +43,8 @@ import { AssetsController } from './assets/assets.controller';
 import { DashboardController } from './dashboard/dashboard.controller';
 import { AttachmentsController } from './attachments/attachments.controller';
 import { LocalStorage } from './attachments/storage';
+import { S3Storage } from './attachments/s3-storage';
+import { JobsService } from './common/jobs.service';
 import { NotificationsService } from './common/notifications.service';
 import { NotificationsController } from './common/notifications.controller';
 import { ModuleReports } from './reports/module-reports';
@@ -55,7 +57,7 @@ import { VouchersService } from './vouchers/vouchers.service';
 
 @Global()
 @Module({
-  providers: [PrismaService, AuditService, MailService, PermissionCatalogService, CompanyBootstrapService, PeriodService, SequenceService, PostingService, VatService, SystemAccountsService, AccessService, NotificationsService, LocalStorage],
+  providers: [PrismaService, AuditService, MailService, PermissionCatalogService, CompanyBootstrapService, PeriodService, SequenceService, PostingService, VatService, SystemAccountsService, AccessService, NotificationsService, { provide: LocalStorage, useFactory: () => (process.env.STORAGE_DRIVER === 's3' ? new S3Storage() : new LocalStorage()) }],
   exports: [PrismaService, AuditService, MailService, CompanyBootstrapService, PeriodService, SequenceService, PostingService, VatService, SystemAccountsService, AccessService, NotificationsService, LocalStorage],
 })
 class CoreModule {}
@@ -78,7 +80,7 @@ class CoreModule {}
   ],
   controllers: [CompaniesController, UsersController, AccountingController, CoaController, LedgersController, VouchersController, ReportsController, VatController, CustomersController, SuppliersController, SalesDocumentsController, PurchaseDocumentsController, ReceiptsController, SupplierPaymentsController, RecurringController, InventoryController, CrmController, HrController, ExpensesController, ProjectsController, AssetsController, DashboardController, AttachmentsController, NotificationsController, PrintController, AuditController, JournalController],
   providers: [
-    DocumentsService, SettlementsService, RecurringService, InventoryHooks, InventoryService, InventoryReports, ModuleReports,
+    JobsService, DocumentsService, SettlementsService, RecurringService, InventoryHooks, InventoryService, InventoryReports, ModuleReports,
     VouchersService, ReportsService, ReportExportService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

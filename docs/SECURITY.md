@@ -10,11 +10,13 @@
 - **Web**: tokens only in httpOnly cookies behind a same-origin proxy (no tokens in JS), security headers, public auth proxy allow-list.
 - **Mobile**: tokens in Keychain/Keystore (`flutter_secure_storage`).
 
+## Dependency audit
+`npm audit --omit=dev` reports 0 vulnerabilities for backend and web. Three transitive advisories were cleared with `overrides` (`deepmerge-ts` ^8, `uuid` ^11.1.1 in the backend; `postcss` ^8.5.10 in the web); the full backend end-to-end suite and the web production build were re-run afterwards. Re-run the audit regularly - overrides need review when Prisma/exceljs/Next are upgraded.
+
 ## Known gaps / to do before production
-1. `npm audit` (prod deps) reports: `deepmerge-ts` via Prisma tooling (stack exhaustion on attacker-controlled recursive objects - config tooling only), `uuid` via `exceljs` (buffer bounds, not reachable: we never pass a buffer), and `postcss` bundled in Next 15 (build-time CSS only). Upgrade Next/Prisma/exceljs when compatible versions are verified; I did not force-upgrade breaking majors.
-2. No external penetration test, no dependency pinning policy, no SAST in CI.
-3. Replace the stub mail service; enforce `REQUIRE_EMAIL_VERIFICATION=true`.
-4. Move secrets to a secrets manager; rotate the default dev DB passwords; terminate TLS in front of the API.
-5. Add S3-compatible storage + virus scanning for uploads; add CSRF defence if cookies are ever used cross-site (currently SameSite=Lax + same-origin proxy).
-6. Automated encrypted backups and restore drills.
-7. Add refresh-token / session listing and device revocation UI.
+1. No external penetration test, no SAST in CI, no dependency-update automation.
+2. SMTP and S3 drivers exist but were only tested with fakes; enforce `REQUIRE_EMAIL_VERIFICATION=true` once email works.
+3. Move secrets to a secrets manager; rotate the default dev DB passwords (including `nexerp_backup`); terminate TLS in front of the API.
+4. Add virus scanning for uploads; add CSRF defence if cookies are ever used cross-site (currently SameSite=Lax + same-origin proxy).
+5. Backups are scripted (`ops/backup.sh`) but not scheduled or shipped off-site; run a restore drill regularly.
+6. Add refresh-token / session listing and device revocation UI.

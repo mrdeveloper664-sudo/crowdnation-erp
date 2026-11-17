@@ -4,9 +4,9 @@ Multi-company ERP, accounting-first (Tally Prime / Zoho Books style), UAE VAT aw
 
 | Part | Stack | State |
 |---|---|---|
-| `backend/` | NestJS, Prisma, PostgreSQL (RLS), JWT | complete for all phases; 17 unit + 74 e2e tests pass |
+| `backend/` | NestJS, Prisma, PostgreSQL (RLS), JWT | complete for all phases; 21 unit + 76 e2e tests pass |
 | `web/` | Next.js 15, React 19, Tailwind | ~60 pages, production build passes, manually spot-checked |
-| `mobile/` | Flutter, Provider, Dio, GoRouter | 25 tests pass, analyzer clean, **never run on a device** |
+| `mobile/` | Flutter, Provider, Dio, GoRouter | 25 tests pass, analyzer clean, **iOS build failed here, never run on a device** |
 | `docs/` | | checklist, accounting rules, DB design, API, deployment, security |
 
 **Not production-ready.** Read [docs/IMPLEMENTATION_CHECKLIST.md](docs/IMPLEMENTATION_CHECKLIST.md) (what is verified vs. not) and [docs/SECURITY.md](docs/SECURITY.md) first.
