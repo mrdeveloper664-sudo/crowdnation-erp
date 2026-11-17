@@ -29,6 +29,12 @@ cd mobile && flutter pub get && flutter run --dart-define=API_URL=http://localho
 ```
 Demo login: company `DEMO`, `admin@demo.test`, `Demo@12345678`.
 
+## Crowd Nation company / run on GitHub (Codespaces)
+The company is created by `backend/prisma/seed-crowdnation.ts` (company code `CROWD`, base currency AED, admin `admin@crowdnation.test`). **No password is stored in the repo**: set `CROWD_ADMIN_PASSWORD` (e.g. as a Codespaces secret) or a random one is generated and printed once. Company data lives in the database, not in git.
+- **GitHub Codespaces:** Code -> Codespaces -> Create. `.devcontainer/` starts PostgreSQL, applies migrations, creates Crowd Nation (watch the creation log for the generated password) and starts the API (:4000) and web (:3000, forwarded automatically). Log in with company `CROWD`.
+- **Locally:** `cd backend && npm run db:seed:crowdnation` after `prisma migrate deploy`. Optional env: `CROWD_COMPANY_NAME`, `CROWD_COMPANY_CODE`, `CROWD_CURRENCY`, `CROWD_TRN`, `CROWD_ADMIN_NAME`, `CROWD_ADMIN_EMAIL`.
+- Set the real TRN afterwards under Settings -> Company (or pass `CROWD_TRN`). Codespaces runs are **not verified** from this environment (see checklist).
+
 ## Tests
 ```bash
 cd backend

@@ -1,0 +1,14 @@
+{
+  "name": "NEXERP",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "forwardPorts": [3000, 4000],
+  "portsAttributes": {
+    "3000": { "label": "NEXERP web", "onAutoForward": "openBrowser" },
+    "4000": { "label": "NEXERP API (/api/docs)" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "customizations": { "vscode": { "extensions": ["Prisma.prisma", "dbaeumer.vscode-eslint"] } }
+}

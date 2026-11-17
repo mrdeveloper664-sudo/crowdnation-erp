@@ -76,6 +76,10 @@ Test totals (last full run, all green): backend **24 unit + 92 end-to-end** (rea
 - [x] 25 automated tests, `flutter analyze` clean
 - [ ] **Not run on a device/simulator. No Android SDK or Xcode exists in the cloud environment, so `flutter build apk --debug` was NOT attempted this time** (only `flutter analyze` and `flutter test` were re-run: clean / 25 pass). `flutter build ios --simulator` was attempted twice and fails at link time with `Framework 'Flutter' not found` (engine artifacts are present; likely the installed Xcode 15.2 is too old for Flutter 3.41 - unconfirmed). The Android toolchain on this Mac is incomplete. Try a newer Xcode / `flutter doctor` fixes before shipping.
 
+## Crowd Nation company & GitHub Codespaces
+- [x] `npm run db:seed:crowdnation` creates the company (idempotent, run twice locally: created, then "already exists"); no password in the repo
+- [ ] `.devcontainer/` (Codespaces: Postgres + migrate + seed + start servers) is written but **never run** - Codespaces/dev containers are not available from the cloud session that wrote it
+
 ## Phase 12 - security & deployment
 - [x] RLS, argon2id, JWT rotation, validation (whitelist), helmet, rate limiting, audit log, upload hardening
 - [~] Docker: `docker compose` (postgres + backend) was run once in a sandbox: image built, all 9 migrations applied, API started, `/api/docs` answered 200, company registration + login worked, runtime role is `nexerp_app` (not superuser, no BYPASSRLS). **Caveats:** the sandbox blocks `deb.debian.org`, so the image was built from a copy of the Dockerfile on `node:22-bookworm` without the `apt-get install openssl` step (the committed Dockerfile's apt step was *not* executed); the web app has no Dockerfile/compose service; Redis is started but unused. Added `backend/.dockerignore` (host `node_modules` were being copied into the image) and configurable host ports.
