@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { ApiError, api } from '@/lib/api';
 import { money, sumMoney, today } from '@/lib/format';
@@ -74,8 +74,8 @@ export function VoucherEditor({ voucher, onSaved, defaultType }: { voucher?: any
               {lines.map((l, i) => {
                 const vatLine = l.accountType?.startsWith('VAT') || !!l.taxRateId;
                 return (
-                  <>
-                    <tr key={i} className="border-b border-slate-50 align-top">
+                  <React.Fragment key={i}>
+                    <tr className="border-b border-slate-50 align-top">
                       <td className="px-2 py-2 text-center text-slate-400">{i + 1}</td>
                       <td className="px-2 py-1.5"><Combobox value={l.accountId} initialLabel={l.accountLabel} endpoint="/chart-of-accounts/accounts?active=true" map={accountOption} onChange={(v, o) => set(i, { accountId: v, accountLabel: o?.label, accountType: o?.hint })} placeholder="Search account…" />{lineErrors[i] && <div className="mt-0.5 text-xs text-red-600">{lineErrors[i]}</div>}</td>
                       <td className="px-2 py-1.5"><Input value={l.description} onChange={(e) => set(i, { description: e.target.value })} /></td>
@@ -83,11 +83,11 @@ export function VoucherEditor({ voucher, onSaved, defaultType }: { voucher?: any
                       <td className="px-2 py-1.5"><Input className="num text-right" inputMode="decimal" value={l.credit} onChange={(e) => set(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} /></td>
                       <td className="px-1 py-2 text-center"><button aria-label="Remove line" className="text-slate-400 hover:text-red-600" onClick={() => setLines((ls) => (ls.length > 2 ? ls.filter((_, k) => k !== i) : ls))}>✕</button></td>
                     </tr>
-                    {vatLine && <tr key={`v${i}`} className="border-b border-slate-50 bg-amber-50/40"><td /><td colSpan={5} className="px-2 py-1.5"><div className="flex flex-wrap items-center gap-3 text-xs"><span className="font-medium text-amber-800">VAT details</span>
+                    {vatLine && <tr className="border-b border-slate-50 bg-amber-50/40"><td /><td colSpan={5} className="px-2 py-1.5"><div className="flex flex-wrap items-center gap-3 text-xs"><span className="font-medium text-amber-800">VAT details</span>
                       <Select className="w-44" value={l.taxRateId ?? ''} onChange={(e) => set(i, { taxRateId: e.target.value })} aria-label="Tax code"><option value="">Tax code…</option>{taxRates.data?.filter((r) => r.isActive).map((r) => <option key={r.id} value={r.id}>{r.code} · {r.rate}% ({r.effectiveFrom})</option>)}</Select>
                       <Input className="num w-36 text-right" inputMode="decimal" placeholder="Taxable amount" value={l.taxableAmount ?? ''} onChange={(e) => set(i, { taxableAmount: e.target.value })} aria-label="Taxable amount" />
                       <span className="text-slate-500">Zero-rated / exempt: leave the amounts empty on this line.</span></div></td></tr>}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </tbody>
