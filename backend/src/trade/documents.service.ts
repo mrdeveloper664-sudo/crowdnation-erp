@@ -45,9 +45,15 @@ export class DocumentsService {
       const base = round(qty.mul(price).mul(D(100).sub(disc)).div(100), dp);
       const code = l.taxCode ?? product?.taxCode ?? 'STD';
       const rate = await this.vat.resolve(tx, companyId, code, date);
+      if (rate.isReverseCharge) {
+        if (side !== 'PURCHASE') throw new UnprocessableEntityException(`Line ${i + 1}: reverse charge (${code}) applies to purchases only`);
+        if (inclusive) throw new UnprocessableEntityException(`Line ${i + 1}: reverse-charge lines cannot be VAT-inclusive (the supplier charges no VAT)`);
+      }
       const c = calculateVat(base, rate.rate, inclusive, dp);
-      net = net.add(c.net); vat = vat.add(c.vat);
-      out.push({ productId: l.productId, description: l.description ?? product?.name ?? '', quantity: qty, unitPrice: price, discountPct: disc, taxRateId: rate.id, net: c.net, vat: c.vat, gross: c.gross, accountId: l.accountId ?? product?.accountId, warehouseId: l.warehouseId, batchNo: l.batchNo, serialNos: l.serialNos ?? [], sourceLineId: l.sourceLineId });
+      // Reverse charge: the VAT is accounted for by us (output + input), the supplier is owed the net only.
+      const payableVat = rate.isReverseCharge ? ZERO : c.vat;
+      net = net.add(c.net); vat = vat.add(payableVat);
+      out.push({ productId: l.productId, description: l.description ?? product?.name ?? '', quantity: qty, unitPrice: price, discountPct: disc, taxRateId: rate.id, net: c.net, vat: c.vat, gross: c.net.add(payableVat), accountId: l.accountId ?? product?.accountId, warehouseId: l.warehouseId, batchNo: l.batchNo, serialNos: l.serialNos ?? [], sourceLineId: l.sourceLineId });
       if (!out[i].description) throw new UnprocessableEntityException(`Line ${i + 1}: description is required`);
     }
     return { lines: out, net, vat, total: net.add(vat) };
@@ -245,7 +251,15 @@ export class DocumentsService {
       // 3. VAT per rate
       const byRate = new Map<string, { net: Decimal; vat: Decimal }>();
       for (const l of d.lines) if (l.taxRateId) { const g = byRate.get(l.taxRateId) ?? { net: ZERO, vat: ZERO }; g.net = g.net.add(l.net); g.vat = g.vat.add(l.vat); byRate.set(l.taxRateId, g); }
-      for (const [taxRateId, g] of byRate) lines.push({ accountId: vatAccount.id, ...(g.vat.gt(0) ? { [side(!isSales)]: g.vat.toString() } : {}), taxRateId, taxableAmount: g.net.toString(), description: `VAT ${d.number}` });
+      const rateRows = new Map((await tx.taxRate.findMany({ where: { id: { in: [...byRate.keys()] } } })).map((r) => [r.id, r]));
+      for (const [taxRateId, g] of byRate) {
+        lines.push({ accountId: vatAccount.id, ...(g.vat.gt(0) ? { [side(!isSales)]: g.vat.toString() } : {}), taxRateId, taxableAmount: g.net.toString(), description: `VAT ${d.number}` });
+        if (rateRows.get(taxRateId)?.isReverseCharge && g.vat.gt(0)) {
+          // reverse charge: the same VAT is also output VAT payable (the two lines offset each other in the ledger)
+          const outputAccount = await tx.account.findFirstOrThrow({ where: { companyId, type: 'VAT_OUTPUT' } });
+          lines.push({ accountId: outputAccount.id, [side(isSales)]: g.vat.toString(), taxRateId, taxableAmount: g.net.toString(), description: `Reverse charge VAT ${d.number}` });
+        }
+      }
       const type = isSales ? (reverse ? 'CREDIT_NOTE' : 'SALES') : reverse ? 'DEBIT_NOTE' : 'PURCHASE';
       const v = await this.vouchers.create(companyId, userId, { type, date: isoDate(d.docDate), reference: d.number, narration: `${d.number} ${d.party.name}`, currency: d.currency, exchangeRate: d.exchangeRate.toString(), lines }, undefined, tx);
       await this.vouchers.post(companyId, userId, v.id, tx);

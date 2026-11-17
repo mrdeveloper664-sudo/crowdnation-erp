@@ -17,10 +17,12 @@ export function DocumentEditor({ side, type, doc, partyId, onSaved }: { side: 's
   const isSales = side === 'sales'; const partyEndpoint = isSales ? '/customers?active=true' : '/suppliers?active=true';
   const rateOf = (code: string) => Number(rates.data?.filter((r) => r.code === code && r.isActive).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom)).find((r) => r.effectiveFrom <= f.date)?.rate ?? 0);
   useEffect(() => { if (doc?.lines && rates.data) { api.get('/vat/rates').then((r) => setLines((ls) => ls.map((l, i) => { const tr = doc.lines[i]?.taxRateId ? r.data.find((x: any) => x.id === doc.lines[i].taxRateId) : null; return tr ? { ...l, taxCode: tr.code } : l; }))); } }, [doc, rates.data !== undefined]); // eslint-disable-line react-hooks/exhaustive-deps
-  const est = useMemo(() => lines.map((l) => estimateLine(l.quantity, l.unitPrice, l.discountPct, rateOf(l.taxCode), f.pricesIncludeVat)), [lines, f.pricesIncludeVat, f.date, rates.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const net = sumMoney(est.map((e) => e.net)), vat = sumMoney(est.map((e) => e.vat)), total = sumMoney(est.map((e) => e.gross));
+  const isRc = (code: string) => !!rates.data?.some((r) => r.code === code && r.isReverseCharge);
+  // reverse charge: VAT is self-assessed (shown per line) but not added to what the supplier is owed
+  const est = useMemo(() => lines.map((l) => { const e = estimateLine(l.quantity, l.unitPrice, l.discountPct, rateOf(l.taxCode), f.pricesIncludeVat && !isRc(l.taxCode)); return isRc(l.taxCode) ? { ...e, gross: e.net, rc: true } : { ...e, rc: false }; }), [lines, f.pricesIncludeVat, f.date, rates.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const net = sumMoney(est.map((e) => e.net)), vat = sumMoney(est.map((e) => (e.rc ? '0' : e.vat))), total = sumMoney(est.map((e) => e.gross));
   const set = (i: number, p: Partial<L>) => setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...p } : l)));
-  const codes = [...new Set(rates.data?.map((r) => r.code) ?? ['STD'])];
+  const codes = [...new Set(rates.data?.filter((r) => isSales ? !r.isReverseCharge : true).map((r) => r.code) ?? ['STD'])];
 
   async function save(post: boolean) {
     setErr('');
@@ -65,7 +67,7 @@ export function DocumentEditor({ side, type, doc, partyId, onSaved }: { side: 's
               <td className="px-2 py-1.5"><Input className="num text-right" inputMode="decimal" value={l.discountPct} onChange={(e) => set(i, { discountPct: e.target.value })} /></td>
               <td className="px-2 py-1.5"><Select value={l.taxCode} onChange={(e) => set(i, { taxCode: e.target.value })}>{codes.map((c) => <option key={c}>{c}</option>)}</Select></td>
               {!isSales && <td className="min-w-[10rem] px-2 py-1.5"><Combobox value={l.accountId} initialLabel={l.accountLabel} endpoint="/chart-of-accounts/accounts?active=true" map={accountOption} placeholder="Default" onChange={(v, o) => set(i, { accountId: v, accountLabel: o?.label })} /></td>}
-              <td className="num px-2 py-3 text-right">{money(est[i].net)}</td><td className="num px-2 py-3 text-right">{money(est[i].vat)}</td><td className="num px-2 py-3 text-right font-medium">{money(est[i].gross)}</td>
+              <td className="num px-2 py-3 text-right">{money(est[i].net)}</td><td className="num px-2 py-3 text-right" title={est[i].rc ? 'Reverse charge: self-assessed output + input VAT, not payable to the supplier' : undefined}>{money(est[i].vat)}{est[i].rc ? ' RC' : ''}</td><td className="num px-2 py-3 text-right font-medium">{money(est[i].gross)}</td>
               <td className="px-1 py-3"><button aria-label="Remove line" className="text-slate-400 hover:text-red-600" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((_, k) => k !== i) : ls))}>✕</button></td>
             </tr>))}</tbody>
           <tfoot><tr className="border-t-2"><td colSpan={isSales ? 6 : 7} className="px-2 py-2 text-right text-xs text-slate-500">Estimated totals (final amounts are calculated by the server)</td><td className="num px-2 py-2 text-right font-semibold">{money(net)}</td><td className="num px-2 py-2 text-right font-semibold">{money(vat)}</td><td className="num px-2 py-2 text-right text-base font-bold">{money(total)}</td><td /></tr></tfoot>

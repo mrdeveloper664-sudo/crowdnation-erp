@@ -15,6 +15,8 @@ class TaxRateDto {
   @Matches(/^\d{1,3}(\.\d{1,4})?$/) rate: string;
   @Matches(IsoDate) effectiveFrom: string;
   @IsOptional() @Matches(IsoDate) effectiveTo?: string;
+  /** Reverse-charge code (purchases from non-registered/foreign suppliers): requires a standard-rated treatment with a rate above zero. */
+  @IsOptional() @IsBoolean() reverseCharge?: boolean;
 }
 class CalcDto {
   @IsString() code: string;
@@ -44,13 +46,24 @@ export class VatController {
   createRate(@CurrentUser() u: AuthUser, @Body() dto: TaxRateDto) {
     const from = parseDate(dto.effectiveFrom, 'effectiveFrom');
     const to = dto.effectiveTo ? parseDate(dto.effectiveTo, 'effectiveTo') : null;
+    if (dto.reverseCharge && (dto.treatment !== 'STANDARD' || Number(dto.rate) <= 0)) throw new BadRequestException('A reverse-charge code must be standard rated with a rate above zero');
     if (to && to < from) throw new BadRequestException('effectiveTo precedes effectiveFrom');
     return this.prisma.tenant(u.companyId, async (tx) => {
       await this.vat.ensureDefaults(tx, u.companyId);
       const prev = await tx.taxRate.findFirst({ where: { code: dto.code, effectiveFrom: { lt: from }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: from } }] }, orderBy: { effectiveFrom: 'desc' } });
       if (prev) await tx.taxRate.update({ where: { id: prev.id }, data: { effectiveTo: new Date(from.getTime() - 86_400_000) } });
-      const r = await tx.taxRate.create({ data: { companyId: u.companyId, code: dto.code, name: dto.name, treatment: dto.treatment, rate: dto.rate, effectiveFrom: from, effectiveTo: to } });
+      const r = await tx.taxRate.create({ data: { companyId: u.companyId, code: dto.code, name: dto.name, treatment: dto.treatment, rate: dto.rate, effectiveFrom: from, effectiveTo: to, isReverseCharge: !!dto.reverseCharge } });
       await this.audit.log(tx, { companyId: u.companyId, userId: u.userId, action: 'tax_rate.created', entityType: 'tax_rate', entityId: r.id, after: dto });
+      return { ...r, rate: r.rate.toString() };
+    });
+  }
+
+  /** Convenience: create the standard reverse-charge code `RC` (5%) if it does not exist yet. */
+  @Post('rates/reverse-charge') @RequirePermission('vat', 'create')
+  reverseChargeCode(@CurrentUser() u: AuthUser) {
+    return this.prisma.tenant(u.companyId, async (tx) => {
+      const r = await this.vat.ensureReverseCharge(tx, u.companyId);
+      await this.audit.log(tx, { companyId: u.companyId, userId: u.userId, action: 'tax_rate.reverse_charge_enabled', entityType: 'tax_rate', entityId: r.id });
       return { ...r, rate: r.rate.toString() };
     });
   }

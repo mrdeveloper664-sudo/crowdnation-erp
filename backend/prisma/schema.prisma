@@ -618,6 +618,8 @@ model TaxRate {
   effectiveFrom DateTime     @map("effective_from") @db.Date
   effectiveTo   DateTime?    @map("effective_to") @db.Date
   isActive      Boolean      @default(true) @map("is_active")
+  // UAE reverse charge: the recipient accounts for output and (recoverable) input VAT on a purchase; VAT 201 boxes 3 and 10
+  isReverseCharge Boolean    @default(false) @map("is_reverse_charge")
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([companyId, code, effectiveFrom])
@@ -640,6 +642,7 @@ model TaxTransaction {
   taxAmount      Decimal      @map("tax_amount") @db.Decimal(19, 4)
   isAdjustment   Boolean      @default(false) @map("is_adjustment")
   isReversal     Boolean      @default(false) @map("is_reversal")
+  isReverseCharge Boolean     @default(false) @map("is_reverse_charge")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([companyId, txnDate])

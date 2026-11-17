@@ -3,7 +3,7 @@ import { Prisma, VoucherType } from '@prisma/client';
 import { AuditService } from '../common/audit.service';
 import { isoDate, parseDate } from '../common/dates';
 import { paged } from '../common/interceptors/response.interceptor';
-import { D, ZERO, fmt } from '../common/money';
+import { D, Decimal, ZERO, fmt } from '../common/money';
 import { PrismaService, Tx } from '../common/prisma.service';
 import { PeriodService } from '../accounting/period.service';
 import { PostingService } from '../accounting/posting.service';
@@ -53,6 +53,18 @@ export class VouchersService {
       dr = dr.add(d); cr = cr.add(c);
       return { accountId: l.accountId, debit: d, credit: c, description: l.description, taxRateId: l.taxRateId, taxableAmount: l.taxableAmount ? D(l.taxableAmount) : undefined, isCashBank: CASH_BANK.includes(acc.type), dr: d.gt(0) };
     });
+    // Reverse charge must be recorded as equal input and output VAT (per tax code), and only on purchase-side vouchers.
+    const rcLines = out.filter((l) => l.taxRateId && rates.get(l.taxRateId)?.isReverseCharge);
+    if (rcLines.length) {
+      if (!['PURCHASE', 'DEBIT_NOTE', 'JOURNAL'].includes(type)) throw new UnprocessableEntityException(`Reverse-charge VAT cannot be used on a ${type.replace('_', ' ').toLowerCase()} voucher`);
+      const perRate = new Map<string, { input: Decimal; output: Decimal }>();
+      for (const l of rcLines) {
+        const g = perRate.get(l.taxRateId!) ?? { input: ZERO, output: ZERO };
+        if (byId.get(l.accountId)!.type === 'VAT_INPUT') g.input = g.input.add(l.debit).sub(l.credit); else g.output = g.output.add(l.credit).sub(l.debit);
+        perRate.set(l.taxRateId!, g);
+      }
+      for (const g of perRate.values()) if (!g.input.eq(g.output)) throw new UnprocessableEntityException('Reverse-charge VAT must be recorded as equal input VAT and output VAT');
+    }
     if (!dr.eq(cr)) throw new UnprocessableEntityException(`Voucher is not balanced: debit ${dr.toFixed(dp)} <> credit ${cr.toFixed(dp)}`);
     switch (type) {
       case 'PAYMENT': // money goes OUT: credits are cash/bank, debits are not

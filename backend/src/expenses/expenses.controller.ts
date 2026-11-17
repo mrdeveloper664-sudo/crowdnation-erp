@@ -65,6 +65,7 @@ export class ExpensesController {
     if (d.kind === 'CLAIM' && !employeeId) { employeeId = (await tx.employee.findFirst({ where: { userId: u.userId } }))?.id; if (!employeeId) throw new BadRequestException('Claims need an employee (your user is not linked to one)'); }
     const code = d.taxCode ?? 'OOS';
     const calc = await this.vat.calculate(tx, u.companyId, { code, date, amount: d.amount, inclusive: !!d.includesVat });
+    if (calc.reverseCharge) throw new BadRequestException('Reverse-charge tax codes apply to purchase invoices and journal vouchers, not expenses');
     const fy = await tx.financialYear.findFirst({ where: { startDate: { lte: date }, endDate: { gte: date } } });
     if (!fy) throw new BadRequestException('Date is outside every financial year');
     const number = `EXP-${fy.startDate.getUTCFullYear()}-${this.seq.pad(await this.seq.next(tx, u.companyId, 'EXPENSE', fy.id))}`;

@@ -6,7 +6,7 @@ export const PASSWORD = 'Str0ngPassw0rd!';
 export interface TestCompany { code: string; email: string; password: string }
 
 /** Registers a throw-away company directly on the API (never touches existing companies) and adds one customer. */
-export async function createCompany(): Promise<TestCompany & { customerName: string }> {
+export async function createCompany(): Promise<TestCompany & { customerName: string; supplierName: string }> {
   const code = ('E' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36)).toUpperCase().slice(0, 20);
   const email = `admin@${code.toLowerCase()}.test`;
   const api: APIRequestContext = await request.newContext({ baseURL: API + '/' });
@@ -17,8 +17,13 @@ export async function createCompany(): Promise<TestCompany & { customerName: str
   const customerName = `Customer ${code}`;
   const cust = await api.post('customers', { data: { name: customerName }, headers: { Authorization: `Bearer ${token}` } });
   expect(cust.status(), await cust.text()).toBe(201);
+  const supplierName = `Supplier ${code}`;
+  const sup = await api.post('suppliers', { data: { name: supplierName }, headers: { Authorization: `Bearer ${token}` } });
+  expect(sup.status(), await sup.text()).toBe(201);
+  const rc = await api.post('vat/rates/reverse-charge', { headers: { Authorization: `Bearer ${token}` } });
+  expect(rc.status(), await rc.text()).toBe(201);
   await api.dispose();
-  return { code, email, password: PASSWORD, customerName };
+  return { code, email, password: PASSWORD, customerName, supplierName };
 }
 
 /** Logs in through the real login form. */

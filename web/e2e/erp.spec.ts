@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { TestCompany, createCompany, loginViaUi, pick } from './fixtures';
 
-let company: TestCompany & { customerName: string };
+let company: TestCompany & { customerName: string; supplierName: string };
 const todayIso = new Date().toISOString().slice(0, 10);
 
 test.describe.configure({ mode: 'serial' });
@@ -118,6 +118,35 @@ test('sales invoice: create for a customer, post it, totals include 5% VAT and t
   await expect(page.locator('div', { hasText: /^Receivables/ }).first()).toContainText('1,050.00');
 });
 
+test('purchase invoice with the reverse-charge code: VAT is self-assessed, the supplier is owed the net only, VAT 201 boxes 3 and 10', async ({ page }) => {
+  await loginViaUi(page, company);
+  await page.goto('/purchases/documents/new?type=INVOICE');
+  await pick(page, page.locator('label', { hasText: 'Supplier' }), company.supplierName);
+  const line = page.locator('tbody tr').first();
+  await line.getByRole('textbox').nth(0).fill('Overseas consulting'); // description (Product and Ledger are comboboxes)
+  await line.getByRole('textbox').nth(1).fill('1'); // qty
+  await line.getByRole('textbox').nth(2).fill('1000'); // unit price
+  await line.locator('select').selectOption('RC');
+  await expect(line.getByText('50.00 RC')).toBeVisible(); // self-assessed VAT shown ...
+  await expect(page.locator('tfoot')).toContainText('1,000.00'); // ... but the document total is the net
+  await expect(page.locator('tfoot')).not.toContainText('1,050.00');
+  await pick(page, line.locator('td').filter({ has: page.getByText('Default', { exact: true }) }).last(), '5202'); // expense ledger (the "Default" combobox)
+  await page.getByRole('button', { name: 'Save & post' }).click();
+  await expect(page).toHaveURL(/\/purchases\/documents\/[0-9a-f-]{36}$/);
+  await expect(page.getByText('POSTED', { exact: true })).toBeVisible();
+  const totals = page.locator('section', { hasText: 'Totals' });
+  await expect(totals).toContainText('1,000.00');
+
+  await page.goto('/accounting/vat');
+  const rcRows = page.getByRole('row', { name: /Supplies subject to the reverse charge provision/ });
+  await expect(rcRows).toHaveCount(2); // box 3 (output) and box 10 (input)
+  for (const i of [0, 1]) { await expect(rcRows.nth(i)).toContainText('1,000.00'); await expect(rcRows.nth(i)).toContainText('50.00'); }
+  const res = await page.request.get(`/api/v1/vat/return?from=${todayIso.slice(0, 4)}-01-01&to=${todayIso.slice(0, 4)}-12-31`);
+  const ret = (await res.json()).data;
+  expect(ret.outputs.find((b: any) => b.box === '3')).toMatchObject({ amount: '1000.00', vat: '50.00' });
+  expect(ret.inputs.find((b: any) => b.box === '10')).toMatchObject({ amount: '1000.00', vat: '50.00' });
+});
+
 test('reports: trial balance renders, balances, and exports to PDF / Excel / CSV', async ({ page }) => {
   await loginViaUi(page, company);
   await page.goto('/reports/trial-balance');
@@ -148,5 +177,5 @@ test('reports: trial balance totals are equal after the postings above (debit = 
   const totalRow = body.rows.find((r: any) => r._kind === 'total');
   expect(totalRow).toBeTruthy();
   for (const [dr, cr] of [['openingDebit', 'openingCredit'], ['debit', 'credit'], ['closingDebit', 'closingCredit']]) expect(totalRow[dr], `${dr} = ${cr}`).toBe(totalRow[cr]);
-  expect(totalRow.debit).toBe('2800.50'); // 1,500.00 + 250.50 (journals) + 1,050.00 (invoice incl. VAT)
+  expect(totalRow.debit).toBe('3850.50'); // 1,500.00 + 250.50 (journals) + 1,050.00 (sales invoice incl. VAT) + 1,050.00 (reverse-charge purchase: 1,000 expense + 50 input VAT)
 });
