@@ -16,6 +16,8 @@ const TEMPLATES: Record<string, Tpl> = {
   EXPENSE_CLAIMS_PAYABLE: { code: '2114', name: 'Employee Expense Claims Payable', groupCode: '2110', type: 'GENERAL' },
   DEDUCTIONS_PAYABLE: { code: '2115', name: 'Employee Deductions Payable', groupCode: '2110', type: 'GENERAL' },
   DISPOSAL_GAIN: { code: '4202', name: 'Gain on Asset Disposal', groupCode: '4200', type: 'INCOME' },
+  FX_GAIN: { code: '4201', name: 'Foreign Exchange Gain', groupCode: '4200', type: 'INCOME' },
+  FX_LOSS: { code: '5205', name: 'Foreign Exchange Loss', groupCode: '5200', type: 'EXPENSE' },
   DISPOSAL_LOSS: { code: '5211', name: 'Loss on Asset Disposal', groupCode: '5200', type: 'EXPENSE' },
 };
 

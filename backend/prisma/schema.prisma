@@ -760,6 +760,11 @@ model Settlement {
   status      String         @default("POSTED")
   createdBy   String         @map("created_by") @db.Uuid
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  // foreign-currency settlement: `amount` is in `currency` (null = company base currency), translated at `exchangeRate`
+  currency         String?   @db.VarChar(3)
+  exchangeRate     Decimal   @default(1) @map("exchange_rate") @db.Decimal(19, 8)
+  fxAmount         Decimal   @default(0) @map("fx_amount") @db.Decimal(19, 4) // realised FX in base currency: >0 gain, <0 loss
+  fxJournalEntryId String?   @map("fx_journal_entry_id") @db.Uuid
 
   party Party @relation(fields: [partyId], references: [id])
   allocations SettlementAllocation[]
@@ -775,7 +780,8 @@ model SettlementAllocation {
   settlementId     String?  @map("settlement_id") @db.Uuid
   creditDocumentId String?  @map("credit_document_id") @db.Uuid
   documentId       String   @map("document_id") @db.Uuid
-  amount           Decimal  @db.Decimal(19, 4)
+  amount           Decimal  @db.Decimal(19, 4) // in the invoice currency
+  baseAmount       Decimal? @map("base_amount") @db.Decimal(19, 4) // carrying value in base currency that this allocation clears
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Cascade)

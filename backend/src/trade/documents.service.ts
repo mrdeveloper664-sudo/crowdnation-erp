@@ -14,6 +14,7 @@ import { VouchersService } from '../vouchers/vouchers.service';
 import { DocDto, DocLineDto, UpdateDocDto } from './documents.dto';
 import { partyBalance } from './parties.controller';
 import { InventoryHooks } from './inventory.hooks';
+import { carryingBase } from './settlements.service';
 
 export const TYPES: Record<DocSide, DocType[]> = {
   SALES: ['QUOTATION', 'ORDER', 'INVOICE', 'CREDIT_NOTE'],
@@ -287,7 +288,11 @@ export class DocumentsService {
       const [paid, applied] = await Promise.all([this.allocatedTo(tx, [invoiceId]), this.appliedFrom(tx, [noteId])]);
       if (amount.gt(inv.total.sub(paid.get(invoiceId) ?? ZERO))) throw new UnprocessableEntityException('Amount exceeds the invoice outstanding');
       if (amount.gt(note.total.sub(applied.get(noteId) ?? ZERO))) throw new UnprocessableEntityException('Amount exceeds the unapplied note balance');
-      await tx.settlementAllocation.create({ data: { companyId, creditDocumentId: noteId, documentId: invoiceId, amount } });
+      // A note and its invoice must be in the same currency at the same rate, otherwise the ledger would carry an unposted FX difference.
+      if (note.currency !== inv.currency || !note.exchangeRate.eq(inv.exchangeRate)) throw new UnprocessableEntityException(`Note (${note.currency} @ ${note.exchangeRate}) and invoice (${inv.currency} @ ${inv.exchangeRate}) must have the same currency and exchange rate`);
+      const { dp } = await this.settings(tx, companyId);
+      const baseAmount = await carryingBase(tx, inv, amount, dp);
+      await tx.settlementAllocation.create({ data: { companyId, creditDocumentId: noteId, documentId: invoiceId, amount, baseAmount } });
       await this.audit.log(tx, { companyId, userId, action: 'document.note_applied', entityType: 'document', entityId: noteId, after: { invoiceId, amount: amountStr } });
       return { applied: fmt(amount) };
     });

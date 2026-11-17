@@ -10,19 +10,22 @@ import { useSession } from '@/components/Session';
 import { Alert, Badge, Button, Field, Input, Modal, PageHeader, Select } from '@/components/ui';
 
 function Inner({ side }: { side: 'sales' | 'purchases' }) {
-  const sp = useSearchParams(); const { can } = useSession();
+  const sp = useSearchParams(); const { can, me } = useSession(); const base = me?.company?.baseCurrency;
   const isReceipt = side === 'sales'; const path = `/${side}/${isReceipt ? 'receipts' : 'payments'}`; const res = isReceipt ? 'sales' : 'purchase';
   const [page, setPage] = useState(1); const { data, meta, loading, reload } = useApi<any[]>(`${path}${qs({ page })}`);
   const [open, setOpen] = useState(!!sp.get('partyId')); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const [f, setF] = useState({ partyId: sp.get('partyId') ?? '', date: today(), amount: sp.get('amount') ?? '', accountId: '', method: 'BANK', reference: '', notes: '' });
+  const [f, setF] = useState({ partyId: sp.get('partyId') ?? '', date: today(), amount: sp.get('amount') ?? '', accountId: '', method: 'BANK', reference: '', notes: '', currency: '', exchangeRate: '' });
   const [alloc, setAlloc] = useState<Record<string, string>>(sp.get('invoiceId') ? { [sp.get('invoiceId')!]: sp.get('amount') ?? '' } : {});
   const invoices = useApi<any[]>(open && f.partyId ? `/${side}/documents?type=INVOICE&outstanding=true&partyId=${f.partyId}&pageSize=100` : null);
   const allocated = sumMoney(Object.values(alloc)); const unalloc = sumMoney([f.amount || '0', '-' + allocated]);
   useEffect(() => { if (sp.get('partyId')) setOpen(true); }, [sp]);
-  const cols: Column[] = [{ key: 'settleDate', label: 'Date' }, { key: 'number', label: 'Number' }, { key: 'party', label: isReceipt ? 'Customer' : 'Supplier', render: (r) => r.party?.name }, { key: 'method', label: 'Method' }, { key: 'reference', label: 'Reference' }, { key: 'amount', label: 'Amount', align: 'right', render: (r) => money(r.amount) }, { key: 'status', label: 'Status', render: (r) => <Badge tone={r.status === 'POSTED' ? 'green' : 'red'}>{r.status}</Badge> }];
+  // arriving from an invoice ("Record receipt"): take the invoice's currency
+  const linked = sp.get('invoiceId'); const linkedCur = invoices.data?.find((i) => i.id === linked)?.currency;
+  useEffect(() => { if (linkedCur && base && linkedCur !== base) setF((x) => (x.currency ? x : { ...x, currency: linkedCur })); }, [linkedCur, base]);
+  const cols: Column[] = [{ key: 'settleDate', label: 'Date' }, { key: 'number', label: 'Number' }, { key: 'party', label: isReceipt ? 'Customer' : 'Supplier', render: (r) => r.party?.name }, { key: 'method', label: 'Method' }, { key: 'reference', label: 'Reference' }, { key: 'amount', label: 'Amount', align: 'right', render: (r) => `${money(r.amount)}${r.currency && r.currency !== base ? ' ' + r.currency : ''}` }, { key: 'fx', label: 'FX gain/(loss)', align: 'right', render: (r) => (r.fxAmount && Number(r.fxAmount) !== 0 ? money(r.fxAmount) : '') }, { key: 'status', label: 'Status', render: (r) => <Badge tone={r.status === 'POSTED' ? 'green' : 'red'}>{r.status}</Badge> }];
   async function submit() {
     setErr(''); setBusy(true);
-    try { await api.post(path, { partyId: f.partyId, date: f.date, amount: f.amount, accountId: f.accountId, method: f.method, reference: f.reference || undefined, notes: f.notes || undefined, allocations: Object.entries(alloc).filter(([, v]) => v && Number(v) > 0).map(([documentId, amount]) => ({ documentId, amount })) }); setOpen(false); reload(); }
+    try { await api.post(path, { partyId: f.partyId, date: f.date, amount: f.amount, accountId: f.accountId, method: f.method, currency: f.currency && f.currency !== base ? f.currency : undefined, exchangeRate: f.currency && f.currency !== base && f.exchangeRate ? f.exchangeRate : undefined, reference: f.reference || undefined, notes: f.notes || undefined, allocations: Object.entries(alloc).filter(([, v]) => v && Number(v) > 0).map(([documentId, amount]) => ({ documentId, amount })) }); setOpen(false); reload(); }
     catch (e) { setErr(e instanceof ApiError ? e.message : String(e)); } finally { setBusy(false); }
   }
   return (
@@ -36,12 +39,14 @@ function Inner({ side }: { side: 'sales' | 'purchases' }) {
             <Field label="Date" required><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
             <Field label={isReceipt ? 'Deposit to' : 'Pay from'} required><Combobox value={f.accountId} endpoint="/chart-of-accounts/accounts?active=true" map={accountOption} onChange={(v) => setF({ ...f, accountId: v })} placeholder="Cash / bank ledger" /></Field>
             <Field label="Amount" required><Input inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
+            <Field label="Currency" hint="Blank = base. Must match the invoices you allocate to"><Input value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value.toUpperCase().slice(0, 3) })} placeholder={base} /></Field>
+            {f.currency && f.currency !== base && <Field label="Exchange rate" hint="Blank = latest saved rate. Gain/loss vs. the invoice rate is posted automatically"><Input inputMode="decimal" value={f.exchangeRate} onChange={(e) => setF({ ...f, exchangeRate: e.target.value })} /></Field>}
             <Field label="Method"><Select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>{['BANK', 'CASH', 'CHEQUE', 'CARD', 'TRANSFER'].map((m) => <option key={m}>{m}</option>)}</Select></Field>
             <Field label="Reference"><Input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} placeholder="Cheque / transfer no." /></Field></div>
           {f.partyId && <div><h4 className="mb-1 text-sm font-semibold">Allocate to invoices</h4>
-            <table className="min-w-full text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="py-1 text-left">Invoice</th><th className="py-1 text-left">Due</th><th className="py-1 text-right">Outstanding</th><th className="w-36 py-1 text-right">Allocate</th></tr></thead>
-              <tbody>{invoices.data?.map((i) => <tr key={i.id} className="border-b border-slate-50"><td className="py-1">{i.number}</td><td>{i.dueDate}</td><td className="num text-right">{money(i.outstanding)}</td><td className="py-1"><Input className="num text-right" inputMode="decimal" value={alloc[i.id] ?? ''} onChange={(e) => setAlloc({ ...alloc, [i.id]: e.target.value })} /></td></tr>)}
-                {invoices.data?.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-slate-400">No open invoices — the amount will be kept on account.</td></tr>}</tbody></table>
+            <table className="min-w-full text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="py-1 text-left">Invoice</th><th className="py-1 text-left">Due</th><th className="py-1 text-left">Cur.</th><th className="py-1 text-right">Outstanding</th><th className="w-36 py-1 text-right">Allocate</th></tr></thead>
+              <tbody>{invoices.data?.map((i) => <tr key={i.id} className="border-b border-slate-50"><td className="py-1">{i.number}</td><td>{i.dueDate}</td><td>{i.currency}</td><td className="num text-right">{money(i.outstanding)}</td><td className="py-1"><Input className="num text-right" inputMode="decimal" value={alloc[i.id] ?? ''} onChange={(e) => { setAlloc({ ...alloc, [i.id]: e.target.value }); if (e.target.value && i.currency !== f.currency && !(i.currency === base && !f.currency)) setF((x) => ({ ...x, currency: i.currency === base ? '' : i.currency })); }} /></td></tr>)}
+                {invoices.data?.length === 0 && <tr><td colSpan={5} className="py-3 text-center text-slate-400">No open invoices — the amount will be kept on account.</td></tr>}</tbody></table>
             <p className="mt-2 text-right text-xs text-slate-500">Allocated {money(allocated)} · on account {money(unalloc)}</p></div>}
         </div>
       </Modal>
