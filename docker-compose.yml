@@ -1,4 +1,7 @@
-# NOTE: written but NOT yet executed - Docker is not installed on the development machine.
+# Verified once in a sandbox (postgres + backend): 9 migrations applied, API started, /api/docs answered, register + login worked.
+# Not verified there: the apt-get step of backend/Dockerfile (the sandbox blocks deb.debian.org), the web app (no web image/service yet).
+# Host ports can be changed if they clash:  POSTGRES_PORT=5433 REDIS_PORT=6380 API_PORT=4200 JWT_ACCESS_SECRET=... docker compose up --build
+# Redis is not used by the application yet.
 services:
   postgres:
     image: postgres:16
@@ -7,11 +10,11 @@ services:
       POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:-nexerp_pw}
       POSTGRES_DB: nexerp
     volumes: [pgdata:/var/lib/postgresql/data, ./backend/docker/init-roles.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro]
-    ports: ["5432:5432"]
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U nexerp"], interval: 5s, retries: 10 }
   redis:
     image: redis:7
-    ports: ["6379:6379"]
+    ports: ["${REDIS_PORT:-6379}:6379"]
   backend:
     build: ./backend
     depends_on: { postgres: { condition: service_healthy } }
@@ -21,6 +24,6 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET (>=32 chars)}
       NODE_ENV: production
       PORT: 4000
-    ports: ["4000:4000"]
+    ports: ["${API_PORT:-4000}:4000"]
 volumes:
   pgdata:
