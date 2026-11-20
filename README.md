@@ -29,6 +29,9 @@ cd mobile && flutter pub get && flutter run --dart-define=API_URL=http://localho
 ```
 Demo login: company `DEMO`, `admin@demo.test`, `Demo@12345678`.
 
+## One-command local setup (macOS / Linux / WSL)
+With Node 20+ and PostgreSQL 16 installed and running: `./ops/local-setup.sh` creates the roles and databases, migrates, creates the Crowd Nation company (asks you for the admin password) and starts the API (:4000) and web app (:3000). Safe to re-run. Nothing is hosted; data stays in your local PostgreSQL.
+
 ## Crowd Nation company / run on GitHub (Codespaces)
 The company is created by `backend/prisma/seed-crowdnation.ts` (company code `CROWD`, base currency AED, admin `admin@crowdnation.test`). **No password is stored in the repo**: set `CROWD_ADMIN_PASSWORD` (e.g. as a Codespaces secret) or a random one is generated and printed once. Company data lives in the database, not in git.
 - **GitHub Codespaces:** Code -> Codespaces -> Create. `.devcontainer/` starts PostgreSQL, applies migrations, creates Crowd Nation (watch the creation log for the generated password) and starts the API (:4000) and web (:3000, forwarded automatically). Log in with company `CROWD`.
